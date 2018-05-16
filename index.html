@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=0.5, maximum-scale=0.5, minimum-scale=0.5, user-scalable=no">
+    <meta name="x5-fullscreen" content="true">
+    <meta name="full-screen" content="yes">
+    <title>Show some love to your ONE.</title>
+    <link rel="stylesheet" href="lib/bootstrap-4.0.0-dist/css/bootstrap.min.css">
+
+    <style>
+body {
+    color: #333;
+    line-height: 1.8;
+    letter-spacing: 0.08rem;
+    font-family: open sans, helvetica neue, helvetica, arial, sans-serif
+}
+
+ul,li,ol{
+    list-style: none;
+}
+.item-date{
+    margin-top:5px;
+    color: #999999;
+    text-align: right;
+    padding-right: 10px;
+    font-size: 14px;
+}
+.myloves-list{
+    margin-top: 15px;
+    background-color:darksalmon;
+}
+
+p {
+    margin-top: 0;
+    margin-bottom: 0rem;
+}
+.limit-num{
+    text-align: right;
+    padding-right: 5px;
+    color: #666666;
+    margin-top: 10px;
+}
+
+    </style>
+
+    <script src=lib/jquery-3.3.1.min.js></script>
+    <script src=lib/nebPay.js></script>
+    <script src=lib/bootstrap-4.0.0-dist/js/bootstrap.min.js></script>
+    <script src="lib/artTemplate.js"></script>
+    <script id="loveCards" type="text/html">
+        <div class="card">
+            <ul class="list-group list-group-flush">
+                <%for(var i=0;i<contentItems.length;i++){%>
+                    <li class="list-group-item"><%= contentItems[i].content%>
+                     <p class="item-date"><%= contentItems[i].time%></p>
+                    </li>
+                <%}%>
+            </ul>
+        </div>
+    </script>
+    <script src=lib/nebulas.js></script>
+
+</head>
+
+<body>
+    <div class="container">
+        <h3>Show love &hearts; to your Mr./Mrs. Right, eternally.</h1>
+            <form class="form-inline" style="margin-top: 100px">
+                <div class="form-group">
+                    <label for="search_value"> From whom: </label>
+                    <input type="text" class="form-control" id="search_value" style="margin-left: 10px" placeholder="Lovely Panda">
+                </div>
+                <span class="btn btn-primary" id="search" style="margin-left: 10px">Check</span>
+            </form>
+            <div id="myloves" class="myloves-list">
+            </div>
+
+            <label for="add_value">My love words~~: </label>
+            <textarea id="add_value" class="form-control" rows="3" style="margin-top: 20px" placeholder="Show some love, please~" maxlength="32" oninput="textAreaOnInputChanged()"></textarea>
+            <p id="limitNum" class="limit-num">0/32</p>
+            <span class="btn btn-primary" style="margin-top: 10px;" id="add">Publish My Love!!</span>
+    </div>
+
+    <script>
+        var noteData;
+        var dappAddress = "n1sxyoizogzYQ81WqgW2Lqu5ZLy7TYSfzXP";
+
+        var nebulas = require("nebulas"),
+            Account = nebulas.Account,
+            neb = new nebulas.Neb();
+        neb.setRequest(new nebulas.HttpRequest("https://mainnet.nebulas.io"));
+
+        var NebPay = require("nebpay");
+        var nebPay = new NebPay();
+        var serialNumber
+        var intervalQuery
+
+        $("#search").click(function () {
+            queryLove();
+        })
+        $("#add").click(function () {
+            var key = $("#search_value").val().trim();
+            var content = $("#add_value").val().trim();
+            if (key == "") {
+                alert("From whom??")
+                return
+            }
+            if (content == "") {
+                alert("Show NO love??")
+                return
+            }
+            var contentItem = {
+                time: new Date().toLocaleString(),
+                content: $("#add_value").val()
+            }
+            if (noteData == null) {
+                noteData = { "key": key, "contentItems": [] };
+            }
+            noteData.contentItems.push(contentItem);
+            renderNoteListView(noteData)
+
+            publishLove(key, content);
+        })
+        function textAreaOnInputChanged(){
+            debugger
+            var content = $("#add_value").val().trim();
+            $("#limitNum").html(content.length+"/32")
+        }
+        function funcIntervalQuery() {
+            nebPay.queryPayInfo(serialNumber) 
+                .then(function (resp) {
+                    console.log("tx result: " + resp)   // JSON string
+                    var respObject = JSON.parse(resp)
+                    if (respObject.code === 0) {
+                        alert("Published successfully!")
+                        clearInterval(intervalQuery)
+                    }
+                })
+                .catch(function (err) {
+                    console.log(err);
+                });
+        }
+
+        // Publish love to main net.
+        function publishLove(key, content) {
+            var to = dappAddress;
+            var value = "0";
+            var callFunction = "save"
+            var callArgs = "[\"" + key + "\",\"" + content + "\"]"
+
+            serialNumber = nebPay.call(to, value, callFunction, callArgs, {
+                listener: function (resp) { }   // callback.
+            });
+
+            intervalQuery = setInterval(function () {
+                funcIntervalQuery();
+            }, 5000);
+        }
+
+
+        // Retrieval love.
+        function queryLove() {
+            // query string.
+            var key = $("#search_value").val().trim()
+            if (key == "") {
+                alert("From whom:")
+                return
+            }
+            var from = Account.NewAccount().getAddressString();
+            var value = "0";
+            var nonce = "0"
+            var gas_price = "1000000"
+            var gas_limit = "2000000"
+            var callFunction = "get";
+            var callArgs = "[\"" + $("#search_value").val() + "\"]"; 
+            var contract = {
+                "function": callFunction,
+                "args": callArgs
+            }
+            neb.api.call(from, dappAddress, value, nonce, gas_price, gas_limit, contract).then(function (resp) {
+                renderNoteListView(JSON.parse(resp.result))
+            }).catch(function (err) {
+                console.log("error:" + err.message)
+            })
+        }
+
+
+        function renderNoteListView(data) {
+            if (data == null) {
+                document.getElementById('myloves').innerHTML = "<p>Yet empty. Why not add something?</p>";
+                return
+            }
+            noteData = data;
+            var html = template('loveCards', data);
+            document.getElementById('myloves').innerHTML = html;
+        }
+
+    </script>
+</body>
+
+</html>
